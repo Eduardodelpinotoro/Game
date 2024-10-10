@@ -1,1 +1,58 @@
+import pygame
+import sys
+
+# Inicializa Pygame
+pygame.init()
+
+# Define el tamaño de la pantalla
+screen_size = (800, 600)
+screen = pygame.display.set_mode(screen_size)
+pygame.display.set_caption("Juego con Pygame")
+
+# Define el color (RGB)
+WHITE = (255, 255, 255)
+BLUE = (0, 0, 255)
+
+# Define las propiedades del jugador (un cuadrado)
+player_size = 50
+player_x = screen_size[0] // 2 - player_size // 2
+player_y = screen_size[1] // 2 - player_size // 2
+player_speed = 5
+
+# Bucle principal del juego
+while True:
+    # Manejo de eventos
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+
+    # Obtener teclas presionadas
+    keys = pygame.key.get_pressed()
+
+    # Mover al jugador con las teclas de flecha
+    if keys[pygame.K_LEFT]:
+        player_x -= player_speed
+    if keys[pygame.K_RIGHT]:
+        player_x += player_speed
+    if keys[pygame.K_UP]:
+        player_y -= player_speed
+    if keys[pygame.K_DOWN]:
+        player_y += player_speed
+
+    # Lógica para evitar que el jugador salga de la pantalla
+    player_x = max(0, min(screen_size[0] - player_size, player_x))
+    player_y = max(0, min(screen_size[1] - player_size, player_y))
+
+    # Rellenar la pantalla con color blanco
+    screen.fill(WHITE)
+
+    # Dibujar el jugador (un cuadrado azul)
+    pygame.draw.rect(screen, BLUE, (player_x, player_y, player_size, player_size))
+
+    # Actualizar la pantalla
+    pygame.display.flip()
+
+    # Limitar el FPS
+    pygame.time.Clock().tick(60)
 
