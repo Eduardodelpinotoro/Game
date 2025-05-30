@@ -132,8 +132,7 @@
     canvas.height = window.innerHeight;
 
     // Load sprites and effects
-    const playerEffect = new Image();
-    playerSprite.src = 'player_sprite.png';
+    
     const playerEffect = new Image();
     playerEffect.src = 'player_effect.png';
     const enemyEffect = new Image();
@@ -159,7 +158,7 @@
 
     // Wait for images to load before starting game
     Promise.all([
-      new Promise(resolve => playerSprite.onload = resolve),
+      
       new Promise(resolve => playerEffect.onload = resolve),
       new Promise(resolve => enemyEffect.onload = resolve),
       new Promise(resolve => attackEffect.onload = resolve),
