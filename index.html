@@ -1,0 +1,1013 @@
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Endless Nightmare: Infinite Horror Maze</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+      font-family: Arial, sans-serif;
+    }
+    #gameCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    #joystick {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      width: 100px;
+      height: 100px;
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      touch-action: none;
+    }
+    #joystickKnob {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      background-color: rgba(255, 255, 255, 0.5);
+      border-radius: 50%;
+      top: 30px;
+      left: 30px;
+    }
+    .action-buttons {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .action-button {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      touch-action: none;
+    }
+
+    .resource-bars {
+      position: absolute;
+      top: 20px;
+      left: 10px;
+      width: 200px;
+    }
+
+    .resource-bar {
+      height: 15px;
+      margin-bottom: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+    }
+
+    .resource-fill {
+      height: 100%;
+      width: 100%;
+      transition: width 0.3s;
+    }
+
+    #healthBar {
+      background-color: #ff3333;
+    }
+
+    #staminaBar {
+      background-color: #ffd700;
+    }
+
+    #manaBar {
+      background-color: #428bca;
+    }
+
+    #attackBar {
+      background-color: #ffffff;
+    }
+    #coinCounter {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      color: gold;
+      font-size: 24px;
+      font-family: Arial;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="joystick">
+    <div id="joystickKnob"></div>
+  </div>
+  <div id="level-info" style="position: absolute; top: 10px; left: 10px; color: white; font-family: Arial;">Level: 1</div>
+  <div class="resource-bars">
+    <div class="resource-bar"><div id="healthBar" class="resource-fill"></div></div>
+    <div class="resource-bar"><div id="staminaBar" class="resource-fill"></div></div>
+    <div class="resource-bar"><div id="manaBar" class="resource-fill"></div></div>
+    <div class="resource-bar"><div id="attackBar" class="resource-fill"></div></div>
+  </div>
+  <div class="action-buttons">
+    <button class="action-button" id="attackBtn">⚔️</button>
+    <button class="action-button" id="magicBtn">✨</button>
+    <button class="action-button" id="sprintBtn">⚡</button>
+  </div>
+  <div id="coinCounter">0 🪙</div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Load sprites and effects
+    const playerEffect = new Image();
+    playerEffect.src = 'player_effect.png';
+    const enemyEffect = new Image();
+    enemyEffect.src = 'enemy_effect.png';
+    const attackEffect = new Image();
+    attackEffect.src = 'attack_effect.png';
+    const magicEffect = new Image();
+    magicEffect.src = 'magic_effect.png';
+    const floorPattern = new Image();
+    floorPattern.src = 'floor_tile.png';
+    const coinSprite = new Image();
+    coinSprite.src = 'coin.png';
+    const healthPotionSprite = new Image();
+    healthPotionSprite.src = 'potion_health.png';
+    const manaPotionSprite = new Image();
+    manaPotionSprite.src = 'potion_mana.png';
+    const wallTexture = new Image();
+    wallTexture.src = 'wall_texture.png';
+    const spikeFloorTrap = new Image();
+    spikeFloorTrap.src = 'spike_trap.png';
+    const wallSpikeTrap = new Image();
+    wallSpikeTrap.src = 'wall_spike.png';
+
+    // Wait for images to load before starting game
+    Promise.all([
+      new Promise(resolve => playerEffect.onload = resolve),
+      new Promise(resolve => enemyEffect.onload = resolve),
+      new Promise(resolve => attackEffect.onload = resolve),
+      new Promise(resolve => magicEffect.onload = resolve),
+      new Promise(resolve => floorPattern.onload = resolve),
+      new Promise(resolve => coinSprite.onload = resolve),
+      new Promise(resolve => healthPotionSprite.onload = resolve),
+      new Promise(resolve => manaPotionSprite.onload = resolve),
+      new Promise(resolve => wallTexture.onload = resolve),
+      new Promise(resolve => spikeFloorTrap.onload = resolve),
+      new Promise(resolve => wallSpikeTrap.onload = resolve)
+    ]).then(() => {
+      const tileSize = 50;
+      const viewportTiles = 15;
+      let currentLevel = 1;
+      const roomSize = 8; 
+      const corridorWidth = 3; 
+      const mapSize = 50; 
+      let map = [];
+      let exitLocation = { x: 0, y: 0 };
+
+      const player = {
+        x: tileSize * 2,
+        y: tileSize * 2,
+        radius: 20,
+        baseSpeed: 2,
+        speed: 2,
+        health: 100,
+        stamina: 100,
+        mana: 100,
+        attackPower: 100,
+        isSprinting: false,
+        frame: 0,
+        frameCount: 4,
+        animationSpeed: 0.15,
+        animationTimer: 0,
+        attacking: false,
+        castingMagic: false,
+        coins: 0,
+        hasKey: false
+      };
+
+      const camera = {
+        x: 0,
+        y: 0
+      };
+
+      // Add sound effects
+      const backgroundMusic = new Howl({
+        src: ['horror_ambience.mp3'],
+        loop: true,
+        volume: 0.5
+      });
+
+      const jumpscareSound = new Howl({
+        src: ['jumpscare.mp3'],
+        volume: 0.8
+      });
+
+      const slashSound = new Howl({
+        src: ['slash_sound.mp3'],
+        volume: 0.5
+      });
+
+      const monsterHitSound = new Howl({
+        src: ['monster_hit.mp3'],
+        volume: 0.4
+      });
+
+      const magicSound = new Howl({
+        src: ['portal_effect.mp3'],
+        volume: 0.3
+      });
+
+      const pickupSound = new Howl({
+        src: ['pickup_sound.mp3'],
+        volume: 0.5
+      });
+
+      const regeneration = {
+        stamina: 0.2,
+        mana: 0.15,
+        attackPower: 0.25
+      };
+
+      const costs = {
+        sprint: 1,
+        magic: 30,
+        attack: 25
+      };
+
+      const enemies = [];
+      const maxEnemies = 3;
+      let rooms = []; 
+      const items = [];
+      const traps = [];
+
+      // Initialize empty map
+      function initializeMap() {
+        map = Array(mapSize).fill().map(() => Array(mapSize).fill(1));
+        rooms = []; 
+      }
+
+      // Generate rooms and corridors
+      function generateDungeon() {
+        initializeMap();
+        const numRooms = 5 + Math.floor(Math.random() * 3);
+
+        // Generate rooms
+        for (let i = 0; i < numRooms; i++) {
+          let attempts = 0;
+          while (attempts < 50) {
+            const roomX = 2 + Math.floor(Math.random() * (mapSize - roomSize - 4));
+            const roomY = 2 + Math.floor(Math.random() * (mapSize - roomSize - 4));
+            
+            if (canPlaceRoom(roomX, roomY, roomSize)) {
+              placeRoom(roomX, roomY, roomSize);
+              rooms.push({ x: roomX, y: roomY, width: roomSize, height: roomSize, enemies: [], spawned: false });
+              break;
+            }
+            attempts++;
+          }
+        }
+
+        // Connect rooms with corridors
+        for (let i = 0; i < rooms.length - 1; i++) {
+          connectRooms(rooms[i], rooms[i + 1]);
+        }
+
+        // Set player spawn in first room
+        player.x = rooms[0].x * tileSize + tileSize * 2;
+        player.y = rooms[0].y * tileSize + tileSize * 2;
+
+        // Set exit in last room
+        const lastRoom = rooms[rooms.length - 1];
+        exitLocation.x = lastRoom.x * tileSize + tileSize * 3;
+        exitLocation.y = lastRoom.y * tileSize + tileSize * 3;
+
+        // Add random items to rooms and corridors
+        rooms.forEach(room => {
+          // Add potions to rooms
+          if (Math.random() < 0.4) { // 40% chance for health potion
+            const x = (room.x + 1 + Math.random() * (room.width - 2)) * tileSize;
+            const y = (room.y + 1 + Math.random() * (room.height - 2)) * tileSize;
+            spawnItem(x, y, 'health');
+          }
+          if (Math.random() < 0.4) { // 40% chance for mana potion
+            const x = (room.x + 1 + Math.random() * (room.width - 2)) * tileSize;
+            const y = (room.y + 1 + Math.random() * (room.height - 2)) * tileSize;
+            spawnItem(x, y, 'mana');
+          }
+        });
+
+        // Add key in a random room (not first or last room)
+        const randomRoomIndex = 1 + Math.floor(Math.random() * (rooms.length - 2));
+        const keyRoom = rooms[randomRoomIndex];
+        const keyX = (keyRoom.x + keyRoom.width/2) * tileSize;
+        const keyY = (keyRoom.y + keyRoom.height/2) * tileSize;
+        spawnItem(keyX, keyY, 'key');
+      }
+
+      function canPlaceRoom(x, y, size) {
+        for (let i = x - 1; i < x + size + 1; i++) {
+          for (let j = y - 1; j < y + size + 1; j++) {
+            if (i < 0 || i >= mapSize || j < 0 || j >= mapSize || map[i][j] === 0) {
+              return false;
+            }
+          }
+        }
+        return true;
+      }
+
+      function placeRoom(x, y, size) {
+        for (let i = x; i < x + size; i++) {
+          for (let j = y; j < y + size; j++) {
+            map[i][j] = 0;
+          }
+        }
+      }
+
+      function connectRooms(room1, room2) {
+        const start = {
+          x: room1.x + Math.floor(room1.width / 2),
+          y: room1.y + Math.floor(room1.height / 2)
+        };
+        const end = {
+          x: room2.x + Math.floor(room2.width / 2),
+          y: room2.y + Math.floor(room2.height / 2)
+        };
+
+        // Create L-shaped corridor
+        for (let x = Math.min(start.x, end.x); x <= Math.max(start.x, end.x); x++) {
+          for (let offset = -1; offset <= 1; offset++) {  
+            const y = start.y + offset;
+            if (y >= 0 && y < mapSize) map[x][y] = 0;
+          }
+          // Add wall traps with 15% chance
+          if (Math.random() < 0.15) {
+            traps.push(new Trap(x * tileSize, (start.y + 1.5) * tileSize, 'wall'));
+            traps.push(new Trap(x * tileSize, (start.y - 1.5) * tileSize, 'wall'));
+          }
+        }
+        
+        for (let y = Math.min(start.y, end.y); y <= Math.max(start.y, end.y); y++) {
+          for (let offset = -1; offset <= 1; offset++) {  
+            const x = end.x + offset;
+            if (x >= 0 && x < mapSize) map[x][y] = 0;
+          }
+          // Add floor traps with 15% chance
+          if (Math.random() < 0.15) {
+            traps.push(new Trap(end.x * tileSize, y * tileSize, 'floor'));
+          }
+        }
+      }
+
+      function generateTile(x, y) {
+        if (x < 0 || x >= mapSize || y < 0 || y >= mapSize) return 1;
+        return map[x][y];
+      }
+
+      function drawTile(x, y, type) {
+        const screenX = (x - camera.x) * tileSize + canvas.width / 2;
+        const screenY = (y - camera.y) * tileSize + canvas.height / 2;
+        
+        if (type === 1) {
+          // Only draw walls if they are adjacent to a floor tile
+          let hasAdjacentFloor = false;
+          for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+              if (x + i >= 0 && x + i < mapSize && y + j >= 0 && y + j < mapSize) {
+                if (map[x + i][y + j] === 0) {
+                  hasAdjacentFloor = true;
+                  break;
+                }
+              }
+            }
+            if (hasAdjacentFloor) break;
+          }
+          if (hasAdjacentFloor) {
+            ctx.drawImage(wallTexture, screenX, screenY, tileSize, tileSize);
+          }
+        } else {
+          ctx.drawImage(floorPattern, screenX, screenY, tileSize, tileSize);
+        }
+      }
+
+      function drawMap() {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const startX = Math.floor(camera.x - viewportTiles / 2);
+        const startY = Math.floor(camera.y - viewportTiles / 2);
+        const endX = startX + viewportTiles;
+        const endY = startY + viewportTiles;
+
+        for (let x = startX; x < endX; x++) {
+          for (let y = startY; y < endY; y++) {
+            const tile = generateTile(x, y);
+            if (tile === 0 || (tile === 1 && isAdjacentToFloor(x, y))) {
+              drawTile(x, y, tile);
+            }
+          }
+        }
+
+        const portalX = (exitLocation.x / tileSize - camera.x) * tileSize + canvas.width / 2;
+        const portalY = (exitLocation.y / tileSize - camera.y) * tileSize + canvas.height / 2;
+        ctx.beginPath();
+        ctx.arc(portalX, portalY, tileSize/2, 0, Math.PI * 2);
+        ctx.fillStyle = '#00ff00';
+        ctx.fill();
+      }
+
+      function isAdjacentToFloor(x, y) {
+        for (let i = -1; i <= 1; i++) {
+          for (let j = -1; j <= 1; j++) {
+            if (x + i >= 0 && x + i < mapSize && y + j >= 0 && y + j < mapSize) {
+              if (map[x + i][y + j] === 0) {
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }
+
+      function drawPlayer() {
+        player.animationTimer += player.animationSpeed;
+        if (player.animationTimer >= 1) {
+          player.frame = (player.frame + 1) % player.frameCount;
+          player.animationTimer = 0;
+        }
+
+        ctx.drawImage(
+          playerEffect,
+          player.frame * (playerEffect.width / 4), 0,
+          playerEffect.width / 4, playerEffect.height,
+          canvas.width / 2 - player.radius, canvas.height / 2 - player.radius,
+          player.radius * 2, player.radius * 2
+        );
+
+        if (player.attacking) {
+          ctx.drawImage(
+            attackEffect,
+            player.frame * (attackEffect.width / 4), 0,
+            attackEffect.width / 4, attackEffect.height,
+            canvas.width / 2 - player.radius * 2, canvas.height / 2 - player.radius * 2,
+            player.radius * 4, player.radius * 4
+          );
+        }
+
+        if (player.castingMagic) {
+          ctx.drawImage(
+            magicEffect,
+            player.frame * (magicEffect.width / 4), 0,
+            magicEffect.width / 4, magicEffect.height,
+            canvas.width / 2 - player.radius * 3, canvas.height / 2 - player.radius * 3,
+            player.radius * 6, player.radius * 6
+          );
+        }
+
+        // Health decrease visual feedback
+        if (player.health < 30) {
+          ctx.fillStyle = 'rgba(255,0,0,0.2)';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+
+      class Enemy {
+        constructor(x, y) {
+          this.x = x;
+          this.y = y;
+          this.radius = 20;
+          this.health = 50 + (currentLevel * 15); 
+          this.speed = 0.3 + (currentLevel * 0.1); 
+          this.frame = 0;
+          this.frameCount = 4;
+          this.animationSpeed = 0.15;
+          this.animationTimer = 0;
+          this.strength = 3 + (currentLevel * 3); 
+          this.stunned = false;
+          this.attackTimer = 0;
+          this.attackDelay = 1500; 
+        }
+
+        update() {
+          if (this.stunned) return;
+          
+          // Chase behavior
+          const dx = player.x - this.x;
+          const dy = player.y - this.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          if (dist > player.radius * 2) {
+            this.x += (dx / dist) * this.speed;
+            this.y += (dy / dist) * this.speed;
+          } else {
+            // Attack player when in range
+            const now = Date.now();
+            if (now - this.attackTimer >= this.attackDelay) {
+              player.health = Math.max(0, player.health - this.strength);
+              this.attackTimer = now;
+              
+              // Visual feedback
+              ctx.fillStyle = 'rgba(255,0,0,0.3)';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+          }
+
+          // Animation
+          this.animationTimer += this.animationSpeed;
+          if (this.animationTimer >= 1) {
+            this.frame = (this.frame + 1) % this.frameCount;
+            this.animationTimer = 0;
+          }
+        }
+
+        draw() {
+          const screenX = (this.x - camera.x * tileSize) + canvas.width / 2;
+          const screenY = (this.y - camera.y * tileSize) + canvas.height / 2;
+          
+          ctx.drawImage(
+            enemyEffect,
+            this.frame * (enemyEffect.width / 4), 0,
+            enemyEffect.width / 4, enemyEffect.height,
+            screenX - this.radius, screenY - this.radius,
+            this.radius * 2, this.radius * 2
+          );
+
+          // Health bar
+          ctx.fillStyle = 'red';
+          ctx.fillRect(screenX - this.radius, screenY - this.radius - 10, this.radius * 2, 5);
+          ctx.fillStyle = 'green';
+          ctx.fillRect(screenX - this.radius, screenY - this.radius - 10, (this.radius * 2) * (this.health / 100), 5);
+        }
+      }
+
+      class Item {
+        constructor(x, y, type) {
+          this.x = x;
+          this.y = y;
+          this.type = type; // 'coin', 'health', 'mana', 'key'
+          this.radius = 15;
+          this.frame = 0;
+          this.frameCount = 4;
+          this.animationSpeed = 0.1;
+          this.animationTimer = 0;
+        }
+
+        draw() {
+          const screenX = (this.x - camera.x * tileSize) + canvas.width / 2;
+          const screenY = (this.y - camera.y * tileSize) + canvas.height / 2;
+
+          this.animationTimer += this.animationSpeed;
+          if (this.animationTimer >= 1) {
+            this.frame = (this.frame + 1) % this.frameCount;
+            this.animationTimer = 0;
+          }
+
+          if (this.type === 'key') {
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('🗝️', screenX, screenY + 7);
+          } else {
+            let sprite;
+            switch(this.type) {
+              case 'coin': sprite = coinSprite; break;
+              case 'health': sprite = healthPotionSprite; break;
+              case 'mana': sprite = manaPotionSprite; break;
+            }
+
+            ctx.drawImage(
+              sprite,
+              this.frame * (sprite.width / 4), 0,
+              sprite.width / 4, sprite.height,
+              screenX - this.radius, screenY - this.radius,
+              this.radius * 2, this.radius * 2
+            );
+          }
+        }
+      }
+
+      class Trap {
+        constructor(x, y, type) {
+          this.x = x;
+          this.y = y;
+          this.type = type; // 'floor' or 'wall'
+          this.active = false;
+          this.frame = 0;
+          this.frameCount = 4;
+          this.animationSpeed = 0.15;
+          this.animationTimer = 0;
+          this.damageDelay = 1000;
+          this.lastDamageTime = 0;
+          this.triggerDistance = tileSize;
+          this.damage = 15;
+        }
+
+        update() {
+          const dx = player.x - this.x;
+          const dy = player.y - this.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < this.triggerDistance) {
+            if (!this.active) {
+              this.active = true;
+              new Howl({src: ['trap_trigger.mp3'], volume: 0.4}).play();
+            }
+
+            const now = Date.now();
+            if (dist < tileSize/2 && now - this.lastDamageTime > this.damageDelay) {
+              player.health = Math.max(0, player.health - this.damage);
+              this.lastDamageTime = now;
+            }
+          } else {
+            this.active = false;
+          }
+
+          if (this.active) {
+            this.animationTimer += this.animationSpeed;
+            if (this.animationTimer >= 1) {
+              this.frame = (this.frame + 1) % this.frameCount;
+              this.animationTimer = 0;
+            }
+          } else {
+            this.frame = 0;
+          }
+        }
+
+        draw() {
+          const screenX = (this.x - camera.x * tileSize) + canvas.width / 2;
+          const screenY = (this.y - camera.y * tileSize) + canvas.height / 2;
+          
+          const sprite = this.type === 'floor' ? spikeFloorTrap : wallSpikeTrap;
+          
+          ctx.drawImage(
+            sprite,
+            this.frame * (sprite.width / 4), 0,
+            sprite.width / 4, sprite.height,
+            screenX - tileSize/2, screenY - tileSize/2,
+            tileSize, tileSize
+          );
+        }
+      }
+
+      function spawnItem(x, y, type) {
+        items.push(new Item(x, y, type));
+      }
+
+      function handleEnemyDeath(enemy) {
+        const chance = Math.random();
+        if (chance < 0.7) { // 70% chance for coin
+          spawnItem(enemy.x, enemy.y, 'coin');
+        } else if (chance < 0.85) { // 15% chance for health potion
+          spawnItem(enemy.x, enemy.y, 'health');
+        } else { // 15% chance for mana potion
+          spawnItem(enemy.x, enemy.y, 'mana');
+        }
+        enemies.splice(enemies.indexOf(enemy), 1);
+      }
+
+      function updateResources() {
+        // Regeneration
+        if (!player.isSprinting && player.stamina < 100) {
+          player.stamina = Math.min(100, player.stamina + regeneration.stamina);
+        }
+        if (player.mana < 100) {
+          player.mana = Math.min(100, player.mana + regeneration.mana);
+        }
+        if (player.attackPower < 100) {
+          player.attackPower = Math.min(100, player.attackPower + regeneration.attackPower);
+        }
+
+        // Update bar visuals with transition effect
+        const healthBar = document.getElementById('healthBar');
+        const staminaBar = document.getElementById('staminaBar');
+        const manaBar = document.getElementById('manaBar');
+        const attackBar = document.getElementById('attackBar');
+
+        healthBar.style.width = `${player.health}%`;
+        staminaBar.style.width = `${player.stamina}%`;
+        manaBar.style.width = `${player.mana}%`;
+        attackBar.style.width = `${player.attackPower}%`;
+
+        // Update colors based on value
+        healthBar.style.backgroundColor = player.health < 30 ? '#ff0000' : '#ff3333';
+        staminaBar.style.backgroundColor = player.stamina < 30 ? '#cc9900' : '#ffd700';
+        manaBar.style.backgroundColor = player.mana < 30 ? '#3366cc' : '#428bca';
+        attackBar.style.backgroundColor = player.attackPower < 30 ? '#cccccc' : '#ffffff';
+      }
+
+      function checkPlayerDeath() {
+        if (player.health <= 0) {
+          // Create game over screen
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          
+          ctx.fillStyle = '#ff0000';
+          ctx.font = '48px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2);
+          
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '24px Arial';
+          ctx.fillText(`You reached level ${currentLevel}`, canvas.width/2, canvas.height/2 + 50);
+          ctx.fillText('Tap to restart', canvas.width/2, canvas.height/2 + 100);
+          
+          // Stop the game loop
+          return true;
+        }
+        return false;
+      }
+
+      function checkRoomSpawns() {
+        const playerTileX = Math.floor(player.x / tileSize);
+        const playerTileY = Math.floor(player.y / tileSize);
+
+        rooms.forEach(room => {
+          if (!room.spawned && 
+              playerTileX >= room.x && playerTileX <= room.x + room.width &&
+              playerTileY >= room.y && playerTileY <= room.y + room.height) {
+            
+            const baseEnemyCount = currentLevel === 1 ? 2 : 3;
+            const enemyCount = Math.min(baseEnemyCount + Math.floor(currentLevel / 2), 8);
+            
+            const groupCenter = {
+              x: (room.x + room.width/2) * tileSize,
+              y: (room.y + room.height/2) * tileSize
+            };
+            
+            for (let i = 0; i < enemyCount; i++) {
+              let x, y;
+              if (currentLevel === 1) {
+                const angle = (Math.PI * 2 * i) / enemyCount;
+                const radius = tileSize * 2;
+                x = groupCenter.x + Math.cos(angle) * radius;
+                y = groupCenter.y + Math.sin(angle) * radius;
+              } else {
+                x = (room.x + 1 + Math.random() * (room.width - 2)) * tileSize;
+                y = (room.y + 1 + Math.random() * (room.height - 2)) * tileSize;
+              }
+              enemies.push(new Enemy(x, y));
+            }
+            room.spawned = true;
+          }
+        });
+      }
+
+      function checkItemCollisions() {
+        for(let i = items.length - 1; i >= 0; i--) {
+          const item = items[i];
+          const dx = player.x - item.x;
+          const dy = player.y - item.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < player.radius + item.radius) {
+            pickupSound.play();
+            switch(item.type) {
+              case 'coin':
+                player.coins++;
+                document.getElementById('coinCounter').textContent = `${player.coins} 🪙`;
+                break;
+              case 'health':
+                player.health = Math.min(100, player.health + 30);
+                break;
+              case 'mana':
+                player.mana = Math.min(100, player.mana + 30);
+                break;
+              case 'key':
+                player.hasKey = true;
+                // Add visual feedback
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                break;
+            }
+            items.splice(i, 1);
+          }
+        }
+      }
+
+      function checkPortalInteraction(distance) {
+        if (distance < player.radius + tileSize/2) {
+          if (player.hasKey) {
+            currentLevel++;
+            document.getElementById('level-info').textContent = `Level: ${currentLevel}`;
+            player.hasKey = false; // Reset key for next level
+            generateDungeon();
+          } else {
+            // Visual feedback that key is needed
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+        }
+      }
+
+      function gameLoop() {
+        if (checkPlayerDeath()) return;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (joystickPressed) {
+          const newX = player.x + Math.cos(joystickAngle) * player.speed;
+          const newY = player.y + Math.sin(joystickAngle) * player.speed;
+
+          if (generateTile(Math.floor(newX / tileSize), Math.floor(newY / tileSize)) === 0) {
+            player.x = newX;
+            player.y = newY;
+          }
+        }
+
+        camera.x = player.x / tileSize;
+        camera.y = player.y / tileSize;
+
+        drawMap();
+
+        const dx = exitLocation.x - player.x;
+        const dy = exitLocation.y - player.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        checkPortalInteraction(distance);
+
+        drawPlayer();
+
+        if (player.isSprinting && player.stamina > 0) {
+          player.stamina = Math.max(0, player.stamina - costs.sprint);
+          if (player.stamina <= 0) {
+            player.isSprinting = false;
+            player.speed = player.baseSpeed;
+          }
+        }
+
+        updateResources();
+        
+        checkRoomSpawns();
+        items.forEach(item => item.draw());
+        checkItemCollisions();
+        enemies.forEach(enemy => {
+          enemy.update();
+          enemy.draw();
+        });
+        traps.forEach(trap => {
+          trap.update();
+          trap.draw();
+        });
+
+        requestAnimationFrame(gameLoop);
+      }
+
+      let joystickPressed = false;
+      let joystickAngle = 0;
+
+      const joystick = document.getElementById('joystick');
+      const knob = document.getElementById('joystickKnob');
+
+      joystick.addEventListener('touchstart', handleJoystickStart, false);
+      joystick.addEventListener('touchmove', handleJoystickMove, false);
+      joystick.addEventListener('touchend', handleJoystickEnd, false);
+
+      function handleJoystickStart(event) {
+        joystickPressed = true;
+        backgroundMusic.play();
+      }
+
+      function handleJoystickMove(event) {
+        event.preventDefault();
+        if (joystickPressed) {
+          const touch = event.touches[0];
+          const joystickRect = joystick.getBoundingClientRect();
+          const centerX = joystickRect.left + joystickRect.width / 2;
+          const centerY = joystickRect.top + joystickRect.height / 2;
+          const touchX = touch.clientX - centerX;
+          const touchY = touch.clientY - centerY;
+
+          joystickAngle = Math.atan2(touchY, touchX);
+          const distance = Math.min(joystick.clientWidth / 2, Math.sqrt(touchX * touchX + touchY * touchY));
+          const normalizedX = (Math.cos(joystickAngle) * distance) / (joystick.clientWidth / 2);
+          const normalizedY = (Math.sin(joystickAngle) * distance) / (joystick.clientHeight / 2);
+
+          knob.style.transform = `translate(${normalizedX * 30}px, ${normalizedY * 30}px)`;
+        }
+      }
+
+      function handleJoystickEnd() {
+        joystickPressed = false;
+        knob.style.transform = 'translate(0, 0)';
+      }
+
+      document.getElementById('attackBtn').addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (player.attackPower >= costs.attack) {
+          player.attackPower -= costs.attack;
+          player.attacking = true;
+          slashSound.play();
+
+          enemies.forEach(enemy => {
+            const dx = enemy.x - player.x;
+            const dy = enemy.y - player.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < player.radius * 3) {
+              enemy.health -= 25;
+              enemy.stunned = true;
+              monsterHitSound.play();
+              setTimeout(() => enemy.stunned = false, 500);
+
+              if (enemy.health <= 0) {
+                handleEnemyDeath(enemy);
+              }
+            }
+          });
+
+          setTimeout(() => player.attacking = false, 300);
+        }
+      });
+
+      document.getElementById('magicBtn').addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (player.mana >= costs.magic) {
+          player.mana -= costs.magic;
+          player.castingMagic = true;
+          magicSound.play();
+
+          enemies.forEach(enemy => {
+            const dx = enemy.x - player.x;
+            const dy = enemy.y - player.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < player.radius * 4) {
+              enemy.health -= 40;
+              enemy.stunned = true;
+              setTimeout(() => enemy.stunned = false, 1000);
+
+              if (enemy.health <= 0) {
+                handleEnemyDeath(enemy);
+              }
+            }
+          });
+
+          setTimeout(() => player.castingMagic = false, 500);
+        }
+      });
+
+      let sprintTimeout;
+      document.getElementById('sprintBtn').addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (player.stamina > costs.sprint) {
+          player.isSprinting = true;
+          player.speed = player.baseSpeed * 2;
+          clearTimeout(sprintTimeout);
+        }
+      });
+
+      document.getElementById('sprintBtn').addEventListener('touchend', () => {
+        sprintTimeout = setTimeout(() => {
+          player.isSprinting = false;
+          player.speed = player.baseSpeed;
+        }, 100);
+      });
+
+      window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      });
+
+      canvas.addEventListener('touchstart', () => {
+        if (player.health <= 0) {
+          restartGame();
+        }
+      });
+
+      function restartGame() {
+        currentLevel = 1;
+        player.health = 100;
+        player.stamina = 100;
+        player.mana = 100;
+        player.attackPower = 100;
+        player.coins = 0;
+        document.getElementById('coinCounter').textContent = "0 🪙";
+        enemies.length = 0;
+        rooms.forEach(room => room.spawned = false);
+        items.length = 0;
+        traps.length = 0;
+        generateDungeon();
+        document.getElementById('level-info').textContent = `Level: ${currentLevel}`;
+      }
+
+      generateDungeon();
+      gameLoop();
+    });
+  </script>
+</body></html>
